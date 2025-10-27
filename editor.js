@@ -6,6 +6,13 @@ let canvas, ctx;
 let backgroundImages = [];
 const assetImages = {};
 
+const LOGICAL_WIDTH = 1920;
+const LOGICAL_HEIGHT = 1080;
+
+let scale = 1;
+let offsetX = 0;
+let offsetY = 0;
+
 const assetTypeColors = {
     'Object': '#E0E0E0',    // Light Grey
     'Portal': '#DA70D6',    // Orchid
@@ -19,22 +26,19 @@ let selectedAssetId = null;
 let isDragging = false;
 let dragStartX, dragStartY;
 
-function getScaledPos(e, isTouchEvent = false) {
+function getLogicalCoordsFromEvent(e) {
     const rect = canvas.getBoundingClientRect();
+    const isTouchEvent = e.touches && e.touches.length > 0;
     const touchOrMouseEvent = isTouchEvent ? (e.touches[0] || e.changedTouches[0]) : e;
 
-    // Calculate mouse position relative to the element
-    const rawX = touchOrMouseEvent.clientX - rect.left;
-    const rawY = touchOrMouseEvent.clientY - rect.top;
-    
-    // Calculate scaling factors
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
+    // This gives the click position relative to the canvas element
+    const canvasX = touchOrMouseEvent.clientX - rect.left;
+    const canvasY = touchOrMouseEvent.clientY - rect.top;
 
-    // Adjust mouse coordinates by the scaling factors
+    // This converts the canvas-relative coord to a logical scene coord
     return {
-        x: rawX * scaleX,
-        y: rawY * scaleY
+        x: (canvasX - offsetX) / scale,
+        y: (canvasY - offsetY) / scale,
     };
 }
 
@@ -49,7 +53,7 @@ function getTouchPos(e) {
 function onMouseDown(e) {
     if (activeTool !== 'move') return;
 
-    const pos = getMousePos(e);
+    const pos = getLogicalCoordsFromEvent(e);
     const clickedAsset = getAssetAtPos(pos);
 
     if (clickedAsset) {
@@ -65,7 +69,7 @@ function onMouseDown(e) {
 function onTouchStart(e) {
     if (e.touches.length === 1) {
         e.preventDefault();
-        const pos = getTouchPos(e);
+        const pos = getLogicalCoordsFromEvent(e);
         const clickedAsset = getAssetAtPos(pos);
 
         if (clickedAsset && activeTool === 'move') {
@@ -149,7 +153,26 @@ function resizeCanvas() {
 
 export function redrawCanvas() {
     if (!ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Clear the entire canvas (including letterbox areas)
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Calculate scale and offset for letterboxing
+    const scaleX = canvas.width / LOGICAL_WIDTH;
+    const scaleY = canvas.height / LOGICAL_HEIGHT;
+    scale = Math.min(scaleX, scaleY);
+
+    const renderWidth = LOGICAL_WIDTH * scale;
+    const renderHeight = LOGICAL_HEIGHT * scale;
+    
+    offsetX = (canvas.width - renderWidth) / 2;
+    offsetY = (canvas.height - renderHeight) / 2;
+    
+    // Save context, translate and scale to draw the scene
+    ctx.save();
+    ctx.translate(offsetX, offsetY);
+    ctx.scale(scale, scale);
 
     // Draw background layers
     if (sceneState.backgrounds.length > 0 && backgroundImages.length !== sceneState.backgrounds.length) {
@@ -165,7 +188,7 @@ export function redrawCanvas() {
     if (backgroundImages.length > 0) {
         backgroundImages.forEach(bgImg => {
             if (bgImg.complete) {
-                ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
+                ctx.drawImage(bgImg, 0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
             }
         });
     }
@@ -190,6 +213,9 @@ export function redrawCanvas() {
             }
         }
     });
+
+    // Restore context to remove transformations
+    ctx.restore();
 }
 
 export function getAssetAtPos(pos) {
@@ -212,7 +238,7 @@ function selectAsset(asset) {
 
 function onMouseMove(e) {
     if (isDragging && selectedAssetId && activeTool === 'move') {
-        const pos = getMousePos(e);
+        const pos = getLogicalCoordsFromEvent(e);
         updateAsset(selectedAssetId, {
             x: pos.x - dragStartX,
             y: pos.y - dragStartY,
@@ -226,7 +252,7 @@ function onTouchMove(e) {
     if (e.touches.length === 1) {
         e.preventDefault();
         if (isDragging && selectedAssetId && activeTool === 'move') {
-            const pos = getTouchPos(e);
+            const pos = getLogicalCoordsFromEvent(e);
             updateAsset(selectedAssetId, {
                 x: pos.x - dragStartX,
                 y: pos.y - dragStartY,
@@ -274,15 +300,17 @@ function onDrop(e) {
             return;
         }
 
-        const pos = getMousePos(e);
+        const pos = getLogicalCoordsFromEvent(e);
+        
+        const assetSize = LOGICAL_WIDTH / 15; // Make asset size relative
 
         const newAsset = {
             ...assetData,
             id: `asset_${Date.now()}`,
-            x: pos.x - 50, // center on cursor
-            y: pos.y - 50,
-            width: 100,
-            height: 100,
+            x: pos.x - (assetSize / 2), // center on cursor
+            y: pos.y - (assetSize / 2),
+            width: assetSize,
+            height: assetSize,
             name: `${assetData.type} - ${assetData.prompt.substring(0, 15)}...`
         };
         addAssetToScene(newAsset);
@@ -295,7 +323,7 @@ function onDrop(e) {
 
 function onClick(e) {
     // For touch, the position needs to be derived from the touch event if it exists
-    const pos = e.touches ? getTouchPos(e) : getMousePos(e);
+    const pos = getLogicalCoordsFromEvent(e);
 
     // Click-to-select is now handled by onMouseDown, so we can avoid re-selecting here
     // which might interfere with drag initiation. We only handle adding assets here.
@@ -317,13 +345,15 @@ function onClick(e) {
             return;
         }
 
+        const assetSize = LOGICAL_WIDTH / 15; // Make asset size relative
+
         const newAsset = {
             ...assetData,
             id: `asset_${Date.now()}`,
-            x: pos.x - 50, // center it
-            y: pos.y - 50,
-            width: 100,
-            height: 100,
+            x: pos.x - (assetSize / 2), // center it
+            y: pos.y - (assetSize / 2),
+            width: assetSize,
+            height: assetSize,
             name: `${assetData.type} - ${assetData.prompt.substring(0, 15)}...`
         };
         addAssetToScene(newAsset);

@@ -19,12 +19,26 @@ let selectedAssetId = null;
 let isDragging = false;
 let dragStartX, dragStartY;
 
+function getMousePos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const style = window.getComputedStyle(canvas);
+    const borderLeft = parseFloat(style.getPropertyValue('border-left-width'));
+    const borderTop = parseFloat(style.getPropertyValue('border-top-width'));
+    return {
+        x: e.clientX - rect.left - borderLeft,
+        y: e.clientY - rect.top - borderTop
+    };
+}
+
 function getTouchPos(e) {
     const rect = canvas.getBoundingClientRect();
     const touch = e.touches[0] || e.changedTouches[0];
+    const style = window.getComputedStyle(canvas);
+    const borderLeft = parseFloat(style.getPropertyValue('border-left-width'));
+    const borderTop = parseFloat(style.getPropertyValue('border-top-width'));
     return {
-        x: touch.clientX - rect.left,
-        y: touch.clientY - rect.top
+        x: touch.clientX - rect.left - borderLeft,
+        y: touch.clientY - rect.top - borderTop
     };
 }
 
@@ -167,19 +181,11 @@ export function redrawCanvas() {
             if (asset.id === selectedAssetId) {
                 const color = assetTypeColors[asset.type] || '#007bff'; // Fallback to blue
                 ctx.strokeStyle = color;
-                ctx.lineWidth = 4; // Increased from 3 to 4 for better visibility
+                ctx.lineWidth = 3; // Thicker for emphasis
                 ctx.strokeRect(asset.x, asset.y, asset.width, asset.height);
             }
         }
     });
-}
-
-function getMousePos(e) {
-    const rect = canvas.getBoundingClientRect();
-    return {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top
-    };
 }
 
 export function getAssetAtPos(pos) {

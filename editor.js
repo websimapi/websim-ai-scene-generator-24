@@ -19,27 +19,31 @@ let selectedAssetId = null;
 let isDragging = false;
 let dragStartX, dragStartY;
 
-function getMousePos(e) {
+function getScaledPos(e, isTouchEvent = false) {
     const rect = canvas.getBoundingClientRect();
-    const style = window.getComputedStyle(canvas);
-    const borderLeft = parseFloat(style.getPropertyValue('border-left-width'));
-    const borderTop = parseFloat(style.getPropertyValue('border-top-width'));
+    const touchOrMouseEvent = isTouchEvent ? (e.touches[0] || e.changedTouches[0]) : e;
+
+    // Calculate mouse position relative to the element
+    const rawX = touchOrMouseEvent.clientX - rect.left;
+    const rawY = touchOrMouseEvent.clientY - rect.top;
+    
+    // Calculate scaling factors
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
+    // Adjust mouse coordinates by the scaling factors
     return {
-        x: e.clientX - rect.left - borderLeft,
-        y: e.clientY - rect.top - borderTop
+        x: rawX * scaleX,
+        y: rawY * scaleY
     };
 }
 
+function getMousePos(e) {
+    return getScaledPos(e, false);
+}
+
 function getTouchPos(e) {
-    const rect = canvas.getBoundingClientRect();
-    const touch = e.touches[0] || e.changedTouches[0];
-    const style = window.getComputedStyle(canvas);
-    const borderLeft = parseFloat(style.getPropertyValue('border-left-width'));
-    const borderTop = parseFloat(style.getPropertyValue('border-top-width'));
-    return {
-        x: touch.clientX - rect.left - borderLeft,
-        y: touch.clientY - rect.top - borderTop
-    };
+    return getScaledPos(e, true);
 }
 
 function onMouseDown(e) {
